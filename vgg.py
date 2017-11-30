@@ -18,6 +18,8 @@ VGG19_LAYERS = (
     'conv5_1', 'relu5_1', 'conv5_2', 'relu5_2', 'conv5_3',
     'relu5_3', 'conv5_4', 'relu5_4'
 )
+target_w = ['conv3_2']
+prune_percent = {'conv3_2':97}
 
 def load_net(data_path):
     data = scipy.io.loadmat(data_path)
@@ -27,6 +29,31 @@ def load_net(data_path):
     mean_pixel = np.mean(mean, axis=(0, 1))
     weights = data['layers'][0]
     return weights, mean_pixel
+def prune_weight(weight_arr,weight_name):                                                                                
+  percent = prune_percent[weight_name]
+  non_zero_weight_arr = weight_arr[weight_arr!=0]
+  pcen = np.percentile(abs(non_zero_weight_arr),percent)
+  print ("percentile " + str(pcen))
+  under_threshold = abs(weight_arr)< pcen
+  before = len(non_zero_weight_arr)
+  weight_arr[under_threshold] = 0
+  non_zero_weight_arr = weight_arr[weight_arr!=0]
+  after = len(non_zero_weight_arr)
+  above_threshold = abs(weight_arr)>= pcen
+  return [above_threshold,weight_arr]
+def apply_prune(name,kernels):
+    if name in target_w:
+        print ("at weight "+name)
+        weight_arr = kernels
+        print ("before pruning #non zero parameters " + str(np.sum(kernels!=0)))
+        before = np.sum(weight_arr!=0)
+        mask,weight_arr_pruned = prune_weight(weight_arr,name)
+        after = np.sum(kernels!=0)
+        print ("pruned "+ str(before-after))    
+        print ("after prunning #non zero parameters " + str(np.sum(kernels!=0)))
+
+    
+
 
 def net_preloaded(weights, input_image, pooling):
     net = {}
@@ -38,6 +65,7 @@ def net_preloaded(weights, input_image, pooling):
             # matconvnet: weights are [width, height, in_channels, out_channels]
             # tensorflow: weights are [height, width, in_channels, out_channels]
             kernels = np.transpose(kernels, (1, 0, 2, 3))
+            apply_prune(name,kernels)
             bias = bias.reshape(-1)
             current = _conv_layer(current, kernels, bias)
         elif kind == 'relu':
@@ -46,13 +74,14 @@ def net_preloaded(weights, input_image, pooling):
             current = _pool_layer(current, pooling)
         net[name] = current
 
+
     assert len(net) == len(VGG19_LAYERS)
     return net
 
 def _conv_layer(input, weights, bias):
     conv = tf.nn.conv2d(input, tf.constant(weights), strides=(1, 1, 1, 1),
             padding='SAME')
-    return tf.nn.bias_add(conv, bias)
+    return  tf.nn.bias_add(conv, bias)
 
 
 def _pool_layer(input, pooling):

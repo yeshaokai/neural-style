@@ -8,8 +8,9 @@ import numpy as np
 from sys import stderr
 
 from PIL import Image
-
-CONTENT_LAYERS = ('relu4_2', 'relu5_2')
+import copy
+#CONTENT_LAYERS = ('relu4_2', 'relu5_2')
+CONTENT_LAYERS = ['relu3_2']
 STYLE_LAYERS = ('relu1_1', 'relu2_1', 'relu3_1', 'relu4_1', 'relu5_1')
 
 try:
@@ -35,9 +36,9 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
     style_shapes = [(1,) + style.shape for style in styles]
     content_features = {}
     style_features = [{} for _ in styles]
-
+    
     vgg_weights, vgg_mean_pixel = vgg.load_net(network)
-
+    vgg_weights_2 = copy.deepcopy(vgg_weights)
     layer_weight = 1.0
     style_layers_weights = {}
     for style_layer in STYLE_LAYERS:
@@ -59,7 +60,7 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
         content_pre = np.array([vgg.preprocess(content, vgg_mean_pixel)])
         for layer in CONTENT_LAYERS:
             content_features[layer] = net[layer].eval(feed_dict={image: content_pre})
-
+    '''
     # compute style features in feedforward mode
     for i in range(len(styles)):
         g = tf.Graph()
@@ -72,7 +73,7 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
                 features = np.reshape(features, (-1, features.shape[3]))
                 gram = np.matmul(features.T, features) / features.size
                 style_features[i][layer] = gram
-
+    '''
     initial_content_noise_coeff = 1.0 - initial_noiseblend
 
     # make stylized image using backpropogation
@@ -86,12 +87,12 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
             noise = np.random.normal(size=shape, scale=np.std(content) * 0.1)
             initial = (initial) * initial_content_noise_coeff + (tf.random_normal(shape) * 0.256) * (1.0 - initial_content_noise_coeff)
         image = tf.Variable(initial)
-        net = vgg.net_preloaded(vgg_weights, image, pooling)
+        net = vgg.net_preloaded(vgg_weights_2, image, pooling)
 
         # content loss
         content_layers_weights = {}
-        content_layers_weights['relu4_2'] = content_weight_blend
-        content_layers_weights['relu5_2'] = 1.0 - content_weight_blend
+        content_layers_weights['relu3_2'] = content_weight_blend
+        #content_layers_weights['relu5_2'] = 1.0 - content_weight_blend
 
         content_loss = 0
         content_losses = []
@@ -100,7 +101,7 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
                     net[content_layer] - content_features[content_layer]) /
                     content_features[content_layer].size))
         content_loss += reduce(tf.add, content_losses)
-
+        '''
         # style loss
         style_loss = 0
         for i in range(len(styles)):
@@ -124,7 +125,9 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
                 (tf.nn.l2_loss(image[:,:,1:,:] - image[:,:,:shape[2]-1,:]) /
                     tv_x_size))
         # overall loss
-        loss = content_loss + style_loss + tv_loss
+        '''
+        loss = content_loss
+        #loss = content_loss + style_loss + tv_loss
 
         # optimizer setup
         train_step = tf.train.AdamOptimizer(learning_rate, beta1, beta2, epsilon).minimize(loss)
