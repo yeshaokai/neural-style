@@ -35,10 +35,10 @@ def build_parser():
     parser.add_argument('--styles',
             dest='styles',
             nargs='+', help='one or more style images',
-            metavar='STYLE', required=True)
+            metavar='STYLE', required=False)
     parser.add_argument('--output',
             dest='output', help='output path',
-            metavar='OUTPUT', required=True)
+            metavar='OUTPUT', required=False)
     parser.add_argument('--iterations', type=int,
             dest='iterations', help='iterations (default %(default)s)',
             metavar='ITERATIONS', default=ITERATIONS)
@@ -113,6 +113,7 @@ def main():
         parser.error("Network %s does not exist. (Did you forget to download it?)" % options.network)
 
     content_image = imread(options.content)
+    '''
     style_images = [imread(style) for style in options.styles]
 
     width = options.width
@@ -121,6 +122,7 @@ def main():
                 content_image.shape[1] * width)), width)
         content_image = scipy.misc.imresize(content_image, new_shape)
     target_shape = content_image.shape
+
     for i in range(len(style_images)):
         style_scale = STYLE_SCALE
         if options.style_scales is not None:
@@ -129,6 +131,7 @@ def main():
                 target_shape[1] / style_images[i].shape[1])
 
     style_blend_weights = options.style_blend_weights
+
     if style_blend_weights is None:
         # default is equal weights
         style_blend_weights = [1.0/len(style_images) for _ in style_images]
@@ -153,7 +156,8 @@ def main():
     if options.checkpoint_output and "%s" not in options.checkpoint_output:
         parser.error("To save intermediate images, the checkpoint output "
                      "parameter must contain `%s` (e.g. `foo%s.jpg`)")
-
+    '''
+    
     for iteration, image in stylize(
         network=options.network,
         initial=initial,

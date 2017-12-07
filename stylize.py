@@ -8,16 +8,24 @@ import numpy as np
 from sys import stderr
 
 from PIL import Image
+import StringIO
+
 import copy
 #CONTENT_LAYERS = ('relu4_2', 'relu5_2')
-CONTENT_LAYERS = ['relu3_2']
+CONTENT_LAYERS = ['relu5_2']#,'relu1_2']
 STYLE_LAYERS = ('relu1_1', 'relu2_1', 'relu3_1', 'relu4_1', 'relu5_1')
-
+target_w = ['conv5_2']
+prune_percent = {'conv5_2':60,'conv1_2':60}
 try:
     reduce
 except NameError:
     from functools import reduce
 
+def save_response(weights,name):
+    # shape, weight_arr, name
+    shape= weights.shape
+    np.save(name,weights)    
+    # by the way what is the shape of ..?
 
 def stylize(network, initial, initial_noiseblend, content, styles, preserve_colors, iterations,
         content_weight, content_weight_blend, style_weight, style_layer_weight_exp, style_blend_weights, tv_weight,
@@ -57,9 +65,19 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
     with g.as_default(), g.device('/cpu:0'), tf.Session() as sess:
         image = tf.placeholder('float', shape=shape)
         net = vgg.net_preloaded(vgg_weights, image, pooling)
+
+
         content_pre = np.array([vgg.preprocess(content, vgg_mean_pixel)])
         for layer in CONTENT_LAYERS:
             content_features[layer] = net[layer].eval(feed_dict={image: content_pre})
+        for weight_name,weight in net.items():
+            if weight_name in target_w:
+
+                filename = 'pruned_%s_%s'%(weight_name,str(prune_percent[weight_name]))
+                content_mine = np.zeros(shape)
+                content_mine[0] = content_pre
+                save_response(weight.eval(feed_dict={image:content_mine}),filename)
+    print "done"
     '''
     # compute style features in feedforward mode
     for i in range(len(styles)):
@@ -74,8 +92,22 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
                 gram = np.matmul(features.T, features) / features.size
                 style_features[i][layer] = gram
     '''
-    initial_content_noise_coeff = 1.0 - initial_noiseblend
+    with g.as_default(), g.device('/cpu:0'), tf.Session() as sess:
+        image = tf.placeholder('float', shape=shape)
+        net = vgg.net_preloaded(vgg_weights_2, image, pooling,apply_pruning=True,target_w = target_w,prune_percent = prune_percent)
 
+        content_pre = np.array([vgg.preprocess(content, vgg_mean_pixel)])
+        for layer in CONTENT_LAYERS:
+            content_features[layer] = net[layer].eval(feed_dict={image: content_pre})
+        for weight_name,weight in net.items():
+            if weight_name in target_w:
+                filename = 'complete_%s'%(weight_name)
+                content_mine = np.zeros(shape)
+                content_mine[0] = content_pre
+                save_response(weight.eval(feed_dict={image:content_mine}),filename)    
+    #initial_content_noise_coeff = 1.0 - initial_noiseblend
+    
+    '''
     # make stylized image using backpropogation
     with tf.Graph().as_default():
         if initial is None:
@@ -87,12 +119,13 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
             noise = np.random.normal(size=shape, scale=np.std(content) * 0.1)
             initial = (initial) * initial_content_noise_coeff + (tf.random_normal(shape) * 0.256) * (1.0 - initial_content_noise_coeff)
         image = tf.Variable(initial)
-        net = vgg.net_preloaded(vgg_weights_2, image, pooling)
+        net = vgg.net_preloaded(vgg_weights_2, image, pooling,apply_pruning=True,target_w=target_w,prune_percent=prune_percent)
+
 
         # content loss
         content_layers_weights = {}
-        content_layers_weights['relu3_2'] = content_weight_blend
-        #content_layers_weights['relu5_2'] = 1.0 - content_weight_blend
+        content_layers_weights['relu5_2'] = content_weight_blend
+        #content_layers_weights['relu1_2'] = 1.0 - content_weight_blend
 
         content_loss = 0
         content_losses = []
@@ -101,31 +134,8 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
                     net[content_layer] - content_features[content_layer]) /
                     content_features[content_layer].size))
         content_loss += reduce(tf.add, content_losses)
-        '''
-        # style loss
-        style_loss = 0
-        for i in range(len(styles)):
-            style_losses = []
-            for style_layer in STYLE_LAYERS:
-                layer = net[style_layer]
-                _, height, width, number = map(lambda i: i.value, layer.get_shape())
-                size = height * width * number
-                feats = tf.reshape(layer, (-1, number))
-                gram = tf.matmul(tf.transpose(feats), feats) / size
-                style_gram = style_features[i][style_layer]
-                style_losses.append(style_layers_weights[style_layer] * 2 * tf.nn.l2_loss(gram - style_gram) / style_gram.size)
-            style_loss += style_weight * style_blend_weights[i] * reduce(tf.add, style_losses)
-
-        # total variation denoising
-        tv_y_size = _tensor_size(image[:,1:,:,:])
-        tv_x_size = _tensor_size(image[:,:,1:,:])
-        tv_loss = tv_weight * 2 * (
-                (tf.nn.l2_loss(image[:,1:,:,:] - image[:,:shape[1]-1,:,:]) /
-                    tv_y_size) +
-                (tf.nn.l2_loss(image[:,:,1:,:] - image[:,:,:shape[2]-1,:]) /
-                    tv_x_size))
-        # overall loss
-        '''
+        
+        
         loss = content_loss
         #loss = content_loss + style_loss + tv_loss
 
@@ -161,7 +171,10 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
                         best = image.eval()
 
                     img_out = vgg.unprocess(best.reshape(shape[1:]), vgg_mean_pixel)
-
+                    for weight_name,weight in net.items():
+                        if weight_name in target_w:
+                            filename = 'pruned_%s_%s'%(weight_name,str(prune_percent[weight_name]))
+                            save_response(weight.eval(),filename)
                     if preserve_colors and preserve_colors == True:
                         original_image = np.clip(content, 0, 255)
                         styled_image = np.clip(img_out, 0, 255)
@@ -199,7 +212,7 @@ def stylize(network, initial, initial_noiseblend, content, styles, preserve_colo
                         img_out
                     )
 
-
+    '''
 def _tensor_size(tensor):
     from operator import mul
     return reduce(mul, (d.value for d in tensor.get_shape()), 1)

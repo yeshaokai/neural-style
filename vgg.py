@@ -18,8 +18,7 @@ VGG19_LAYERS = (
     'conv5_1', 'relu5_1', 'conv5_2', 'relu5_2', 'conv5_3',
     'relu5_3', 'conv5_4', 'relu5_4'
 )
-target_w = ['conv3_2']
-prune_percent = {'conv3_2':97}
+
 
 def load_net(data_path):
     data = scipy.io.loadmat(data_path)
@@ -29,25 +28,27 @@ def load_net(data_path):
     mean_pixel = np.mean(mean, axis=(0, 1))
     weights = data['layers'][0]
     return weights, mean_pixel
-def prune_weight(weight_arr,weight_name):                                                                                
+def prune_weight(weight_arr,weight_name,prune_percent):                                                                                
   percent = prune_percent[weight_name]
   non_zero_weight_arr = weight_arr[weight_arr!=0]
   pcen = np.percentile(abs(non_zero_weight_arr),percent)
   print ("percentile " + str(pcen))
   under_threshold = abs(weight_arr)< pcen
+  above_threshold = abs(weight_arr)>= pcen
   before = len(non_zero_weight_arr)
   weight_arr[under_threshold] = 0
+  #weight_arr[above_threshold] = 0
   non_zero_weight_arr = weight_arr[weight_arr!=0]
   after = len(non_zero_weight_arr)
-  above_threshold = abs(weight_arr)>= pcen
+  
   return [above_threshold,weight_arr]
-def apply_prune(name,kernels):
+def apply_prune(name,kernels,target_w,prune_percent):
     if name in target_w:
         print ("at weight "+name)
         weight_arr = kernels
         print ("before pruning #non zero parameters " + str(np.sum(kernels!=0)))
         before = np.sum(weight_arr!=0)
-        mask,weight_arr_pruned = prune_weight(weight_arr,name)
+        mask,weight_arr_pruned = prune_weight(weight_arr,name,prune_percent)
         after = np.sum(kernels!=0)
         print ("pruned "+ str(before-after))    
         print ("after prunning #non zero parameters " + str(np.sum(kernels!=0)))
@@ -55,7 +56,7 @@ def apply_prune(name,kernels):
     
 
 
-def net_preloaded(weights, input_image, pooling):
+def net_preloaded(weights, input_image, pooling,apply_pruning = False,target_w = None, prune_percent = None):
     net = {}
     current = input_image
     for i, name in enumerate(VGG19_LAYERS):
@@ -65,7 +66,8 @@ def net_preloaded(weights, input_image, pooling):
             # matconvnet: weights are [width, height, in_channels, out_channels]
             # tensorflow: weights are [height, width, in_channels, out_channels]
             kernels = np.transpose(kernels, (1, 0, 2, 3))
-            apply_prune(name,kernels)
+            if apply_pruning and target_w and prune_percent:
+                apply_prune(name,kernels,target_w,prune_percent)
             bias = bias.reshape(-1)
             current = _conv_layer(current, kernels, bias)
         elif kind == 'relu':
