@@ -32,7 +32,7 @@ xTest -= meanImage
 #CONTENT_LAYERS = ('relu4_2', 'relu5_2')
 CONTENT_LAYERS = ['relu5_4']#,'relu1_2']
 target_w = ['conv5_4']
-prune_percent = {'conv5_4':20}
+prune_percent = {'conv5_4':99}
 last_layer = 'relu5_4'
 try:
     reduce
@@ -56,8 +56,8 @@ with tf.device(deviceType):
     x = tf.placeholder(tf.float32, [None,2,2,512])
     y = tf.placeholder(tf.int64,[None])   
 def buildModel(vgg_weights):
-    with tf.device(deviceType):
 
+    with tf.device(deviceType):
         x2 = tf.reshape(x,[-1,2*2*512])
         w = tf.get_variable('w',shape = [2*2*512,10])
         b = tf.get_variable('b',shape = [10])
@@ -71,6 +71,26 @@ def buildModel(vgg_weights):
         correctPrediction = tf.equal(tf.argmax(yOut, 1), y)
         accuracy = tf.reduce_mean(tf.cast(correctPrediction, tf.float32))
         return [meanLoss,accuracy,trainStep]
+tf.reset_default_graph()
+with tf.device(deviceType):
+    x = tf.placeholder(tf.float32, [None,2,2,512])
+    y = tf.placeholder(tf.int64,[None])       
+def buildModel2(vgg_weights):
+    with tf.device(deviceType):
+        x2 = tf.reshape(x,[-1,2*2*512])
+        w = tf.get_variable('w',shape = [2*2*512,10])
+        b = tf.get_variable('b',shape = [10])
+        yOut = tf.matmul(x2,w)+b
+        totalLoss = tf.losses.hinge_loss(tf.one_hot(y, 10), logits=yOut)
+        meanLoss = tf.reduce_mean(totalLoss)
+        optimizer = tf.train.AdamOptimizer(5e-4)
+        trainStep = optimizer.minimize(meanLoss)
+
+            # Define correct Prediction and accuracy                                                   
+        correctPrediction = tf.equal(tf.argmax(yOut, 1), y)
+        accuracy = tf.reduce_mean(tf.cast(correctPrediction, tf.float32))
+        return [meanLoss,accuracy,trainStep]
+
 def train(sess,image,net,Model, xT, yT, xV, yV, xTe, yTe, batchSize=5, epochs=2, printEvery=1):
     trainIndex = np.arange(xTrain.shape[0])
 #    sess.run(tf.global_variables_initializer())
@@ -124,7 +144,7 @@ def test():
 
     content = xVal[0,:,:,:]
     # compute content features in feedforward mode
-
+    content = content.reshape((1,)+ content.shape)
     with  tf.Session() as sess:
         image = tf.placeholder('float', shape=[None,32,32,3])
         net = vgg.net_preloaded(vgg_weights, image, pooling)
@@ -132,34 +152,30 @@ def test():
         
         #content_pre = np.array([vgg.preprocess(content, vgg_mean_pixel)])
 
-        content = content.reshape((1,)+ content.shape)
-        print content.shape
+
+
 
         # retrain happens here
 
-        train(sess,image,net,buildModel(vgg_weights),xTrain, yTrain, xVal, yVal, xTest, yTest)
+#        train(sess,image,net,buildModel(vgg_weights),xTrain, yTrain, xVal, yVal, xTest, yTest)
         for weight_name,weight in net.items():
             if weight_name in target_w:
 
                 filename = 'complete_%s'%(weight_name)
 
                 save_response(net[last_layer].eval(feed_dict={image:content}),filename)
-
+    
 
     with  tf.Session() as sess:
-        image = tf.placeholder('float', shape=shape)
+        image = tf.placeholder('float', shape=[None,32,32,3])
         net = vgg.net_preloaded(vgg_weights_2, image, pooling,apply_pruning=True,target_w = target_w,prune_percent = prune_percent)
-        
-        #content_pre = np.array([vgg.preprocess(content, vgg_mean_pixel)])
 
-        train(sess,image,net,buildModel(vgg_weights2),xTrain, yTrain, xVal, yVal, xTest, yTest)
+        train(sess,image,net,buildModel2(vgg_weights_2),xTrain, yTrain, xVal, yVal, xTest, yTest)
 
         for weight_name,weight in net.items():
             if weight_name in target_w:
                 filename = 'pruned_%s_%s'%(weight_name,str(prune_percent[weight_name]))
-
-                content_mine = np.zeros(shape)
-                content_mine[0] = content_pre
+        
                 save_response(net[last_layer].eval(feed_dict={image:content}),filename)    
     print "done"
     
