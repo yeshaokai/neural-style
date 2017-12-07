@@ -142,8 +142,7 @@ def test():
             if weight_name in target_w:
 
                 filename = 'complete_%s'%(weight_name)
-                content_mine = np.zeros(shape)
-                content_mine[0] = content_pre
+
                 save_response(net[last_layer].eval(feed_dict={image:content}),filename)
 
 
