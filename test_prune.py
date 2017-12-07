@@ -146,7 +146,7 @@ def test():
                 save_response(net[last_layer].eval(feed_dict={image:content}),filename)
 
 
-    with g.as_default(), g.device('/cpu:0'), tf.Session() as sess:
+    with  tf.Session() as sess:
         image = tf.placeholder('float', shape=shape)
         net = vgg.net_preloaded(vgg_weights_2, image, pooling,apply_pruning=True,target_w = target_w,prune_percent = prune_percent)
         
