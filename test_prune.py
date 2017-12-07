@@ -57,8 +57,7 @@ with tf.device(deviceType):
     y = tf.placeholder(tf.int64,[None])   
 def buildModel(vgg_weights):
     with tf.device(deviceType):
-    # not sure how to do this yet    
-        #x = tf.reshape(x,[-1,2*2*512])
+
         x2 = tf.reshape(x,[-1,2*2*512])
         w = tf.get_variable('w',shape = [2*2*512,10])
         b = tf.get_variable('b',shape = [10])
@@ -123,7 +122,7 @@ def test():
     :rtype: iterator[tuple[int|None,image]]
     """
 
-
+    content = xVal[0,:,:,:]
     # compute content features in feedforward mode
 
     with  tf.Session() as sess:
@@ -132,7 +131,7 @@ def test():
         
         
         #content_pre = np.array([vgg.preprocess(content, vgg_mean_pixel)])
-        content = xVal[0,:,:,:]
+
         content = content.reshape((1,)+ content.shape)
         print content.shape
 
@@ -145,7 +144,7 @@ def test():
                 filename = 'complete_%s'%(weight_name)
                 content_mine = np.zeros(shape)
                 content_mine[0] = content_pre
-                save_response(weight.eval(feed_dict={image:content_mine}),filename)
+                save_response(net[last_layer].eval(feed_dict={image:content}),filename)
 
 
     with g.as_default(), g.device('/cpu:0'), tf.Session() as sess:
@@ -162,7 +161,7 @@ def test():
 
                 content_mine = np.zeros(shape)
                 content_mine[0] = content_pre
-                save_response(weight.eval(feed_dict={image:content_mine}),filename)    
+                save_response(net[last_layer].eval(feed_dict={image:content}),filename)    
     print "done"
     
 test()
