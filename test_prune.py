@@ -7,7 +7,7 @@ import numpy as np
 from keras.datasets import cifar10
 from sys import stderr
 import scipy.misc
-from PIL import Image
+
 import StringIO
 import os
 baseDir = os.path.dirname(os.path.abspath('__file__')) + '/'
@@ -44,16 +44,8 @@ def save_response(weights,name):
     shape= weights.shape
     np.save(name,weights)    
     # by the way what is the shape of ..?
-def imread(path):
-    img = scipy.misc.imread(path).astype(np.float)
-    if len(img.shape) == 2:
-        # grayscale                                                                             
-        img = np.dstack((img,img,img))
-    elif img.shape[2] == 4:
-        # PNG with alpha channel                                                                
-        img = img[:,:,:3]
-    return img
-content = imread('examples/1-content.jpg')
+
+
 network = 'imagenet-vgg-verydeep-19.mat'
 
 vgg_weights, vgg_mean_pixel = vgg.load_net(network)
@@ -130,7 +122,7 @@ def test():
 
     :rtype: iterator[tuple[int|None,image]]
     """
-    content_features = {}    
+
 
     # compute content features in feedforward mode
 
@@ -143,8 +135,7 @@ def test():
         content = xVal[0,:,:,:]
         content = content.reshape((1,)+ content.shape)
         print content.shape
-        for layer in CONTENT_LAYERS:
-            content_features[layer] = net[layer].eval(feed_dict={image: content})
+
         # retrain happens here
 
         train(sess,image,net,buildModel(vgg_weights),xTrain, yTrain, xVal, yVal, xTest, yTest)
@@ -160,10 +151,11 @@ def test():
     with g.as_default(), g.device('/cpu:0'), tf.Session() as sess:
         image = tf.placeholder('float', shape=shape)
         net = vgg.net_preloaded(vgg_weights_2, image, pooling,apply_pruning=True,target_w = target_w,prune_percent = prune_percent)
+        
+        #content_pre = np.array([vgg.preprocess(content, vgg_mean_pixel)])
 
-        content_pre = np.array([vgg.preprocess(content, vgg_mean_pixel)])
-        for layer in CONTENT_LAYERS:
-            content_features[layer] = net[layer].eval(feed_dict={image: content_pre})
+        train(sess,image,net,buildModel(vgg_weights2),xTrain, yTrain, xVal, yVal, xTest, yTest)
+
         for weight_name,weight in net.items():
             if weight_name in target_w:
                 filename = 'pruned_%s_%s'%(weight_name,str(prune_percent[weight_name]))
