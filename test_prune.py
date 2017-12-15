@@ -7,7 +7,8 @@ import numpy as np
 from keras.datasets import cifar10
 from sys import stderr
 import scipy.misc
-
+#import Tkinter
+#import matplotlib.pyplot as plt
 import StringIO
 import os
 baseDir = os.path.dirname(os.path.abspath('__file__')) + '/'
@@ -25,14 +26,14 @@ meanImage = np.mean(xTrain, axis=0)
 xTrain -= meanImage
 xVal -= meanImage
 xTest -= meanImage
-
+print yTest
 
 
 
 #CONTENT_LAYERS = ('relu4_2', 'relu5_2')
 CONTENT_LAYERS = ['relu5_4']#,'relu1_2']
 target_w = ['conv5_4']
-prune_percent = {'conv5_4':99}
+prune_percent = {'conv5_4':100}
 last_layer = 'relu5_4'
 try:
     reduce
@@ -90,8 +91,67 @@ def buildModel2(vgg_weights):
         correctPrediction = tf.equal(tf.argmax(yOut, 1), y)
         accuracy = tf.reduce_mean(tf.cast(correctPrediction, tf.float32))
         return [meanLoss,accuracy,trainStep]
+def cluster_analysis():
+    from sklearn.cluster import KMeans
+    from sklearn.metrics import silhouette_score
+    from sklearn.metrics import mean_squared_error
+    from sklearn import decomposition
+    n_sample = 100
+    indices = yTrain[np.logical_and(yTrain>=1,yTrain<=10)][:n_sample]
 
-def train(sess,image,net,Model, xT, yT, xV, yV, xTe, yTe, batchSize=5, epochs=2, printEvery=1):
+
+    x_train = xTrain[indices]
+    y_train = yTrain[indices]
+
+
+    np.random.shuffle(x_train)
+
+    pca = decomposition.PCA(n_components=10)
+
+    _X = x_train.reshape(n_sample,-1)
+    pca.fit_transform(_X)
+
+
+    with  tf.Session() as sess:
+        image = tf.placeholder('float', shape=[None,32,32,3])
+        net = vgg.net_preloaded(vgg_weights, image, pooling)
+        X = net[last_layer].eval(feed_dict={image:x_train})
+
+    X = X.reshape(n_sample,-1)
+    
+    pca = decomposition.PCA(n_components=10)    
+    cluster_X = pca.fit_transform(X)
+    print pca.singular_values_
+    sil_scores = []
+    kmin = 2
+    kmax = 25
+    for k in range(kmin,kmax):
+        km = KMeans(n_clusters=k, n_init=20).fit(cluster_X)
+        sil_scores.append(silhouette_score(cluster_X, km.labels_))
+    print sil_scores
+
+    
+    with  tf.Session() as sess:
+        image = tf.placeholder('float', shape=[None,32,32,3])
+        net = vgg.net_preloaded(vgg_weights_2, image, pooling,apply_pruning=True,target_w = target_w,prune_percent = prune_percent)
+
+        X = net[last_layer].eval(feed_dict={image:x_train})
+    X = X.reshape(n_sample,-1)
+
+    pca = decomposition.PCA(n_components=10)    
+    X = pca.fit_transform(X)
+    print pca.singular_values_
+    cluster_X = pca.fit_transform(X)
+
+    sil_scores = []
+    kmin = 2
+    kmax = 25
+    for k in range(kmin,kmax):
+        km = KMeans(n_clusters=k, n_init=20).fit(cluster_X)
+        sil_scores.append(silhouette_score(cluster_X, km.labels_))
+    print sil_scores
+
+def train(sess,image,net,Model, xT, yT, xV, yV, xTe, yTe, batchSize=100, epochs=2, printEvery=1):
     trainIndex = np.arange(xTrain.shape[0])
 #    sess.run(tf.global_variables_initializer())
     np.random.shuffle(trainIndex)
@@ -109,10 +169,10 @@ def train(sess,image,net,Model, xT, yT, xV, yV, xTe, yTe, batchSize=5, epochs=2,
                 currentBatchSize = yTrain[idX].shape[0]
                 # get response from those train data
                 responseT = net[last_layer].eval(feed_dict={image:xT[idX,:]})
+#                print "response nonzero"
+#                print np.sum(responseT!=0)
 
 
-                #print type(responseT)
-                #print responseT
                 # Train                                                                                             
                 loss, acc, _ = sess.run(Model, feed_dict={x: responseT.astype(np.float32), y: yT[idX]})
 
@@ -170,7 +230,7 @@ def test():
         image = tf.placeholder('float', shape=[None,32,32,3])
         net = vgg.net_preloaded(vgg_weights_2, image, pooling,apply_pruning=True,target_w = target_w,prune_percent = prune_percent)
 
-        train(sess,image,net,buildModel2(vgg_weights_2),xTrain, yTrain, xVal, yVal, xTest, yTest)
+#        train(sess,image,net,buildModel2(vgg_weights_2),xTrain, yTrain, xVal, yVal, xTest, yTest)
 
         for weight_name,weight in net.items():
             if weight_name in target_w:
@@ -178,8 +238,8 @@ def test():
         
                 save_response(net[last_layer].eval(feed_dict={image:content}),filename)    
     print "done"
-    
-test()
+cluster_analysis()
+#test()
 def _tensor_size(tensor):
     from operator import mul
     return reduce(mul, (d.value for d in tensor.get_shape()), 1)

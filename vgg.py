@@ -69,7 +69,7 @@ def net_preloaded(weights, input_image, pooling,apply_pruning = False,target_w =
             if apply_pruning and target_w and prune_percent:
                 apply_prune(name,kernels,target_w,prune_percent)
             bias = bias.reshape(-1)
-            current = _conv_layer(current, kernels, bias)
+            current = _conv_layer(current, kernels, bias,name)
         elif kind == 'relu':
             current = tf.nn.relu(current)
         elif kind == 'pool':
@@ -80,10 +80,15 @@ def net_preloaded(weights, input_image, pooling,apply_pruning = False,target_w =
     assert len(net) == len(VGG19_LAYERS)
     return net
 
-def _conv_layer(input, weights, bias):
+def _conv_layer(input, weights, bias,name):
+#    print "at " + name
+#    print np.sum(weights!=0)
     conv = tf.nn.conv2d(input, tf.constant(weights), strides=(1, 1, 1, 1),
             padding='SAME')
-    return  tf.nn.bias_add(conv, bias)
+    if name == 'conv_5_4':
+        return conv
+    else:
+        return  tf.nn.bias_add(conv, bias)
 
 
 def _pool_layer(input, pooling):
